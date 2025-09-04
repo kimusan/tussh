@@ -60,6 +60,8 @@ Horizontal { height:auto;}
 .form-row > Input { width: 1fr; height: 3; }
 .form-row > Select { width: 1fr; }
 .form-row > TextArea { width: 1fr; height: 3;  }
+/* Make the 'Additional options' TextArea taller and scrollable */
+.form-row > #extras { height: 5; }
 .form-row > Vertical { width: 1fr; }
 .jb-select { width: 1fr; }
 #jb_panel { width: 1fr; height:auto; }
