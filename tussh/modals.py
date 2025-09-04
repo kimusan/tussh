@@ -118,9 +118,11 @@ class OptionsModal(ModalScreen[UserSettings]):
 
 
 class AddEditHostModal(
-    ModalScreen[tuple[str, Dict[str, str], str, Dict[str, str]]
-                | tuple[str, Dict[str, str], str, Dict[str, str], Dict[str, object]]
-                | None]
+    ModalScreen[
+        tuple[str, Dict[str, str], str, Dict[str, str]]
+        | tuple[str, Dict[str, str], str, Dict[str, str], Dict[str, object]]
+        | None
+    ]
 ):
     """Collects fields for Add or Edit. Returns (alias, options, extras_text)."""
 
@@ -139,6 +141,7 @@ class AddEditHostModal(
         favorite: bool = False,
         pinned: bool = False,
         tags: Optional[List[str]] = None,
+        notes: Optional[str] = None,
     ) -> None:
         super().__init__()
         self._title = title
@@ -151,6 +154,7 @@ class AddEditHostModal(
         self._favorite = bool(favorite)
         self._pinned = bool(pinned)
         self._tags = list(tags or [])
+        self._notes = (notes or "").strip()
 
     def compose(self) -> ComposeResult:
         def row(label: str, widget) -> Horizontal:
@@ -206,6 +210,10 @@ class AddEditHostModal(
                 row(
                     "Tags (comma-separated)",
                     Input(", ".join(self._tags), placeholder="prod, db", id="tags_input"),
+                ),
+                row(
+                    "Notes",
+                    TextArea(self._notes, id="notes_input", language=None),
                 ),
                 id="host-form-rows",
                 classes="modal-body",
@@ -347,6 +355,12 @@ class AddEditHostModal(
                 row(
                     "Tags (comma-separated)",
                     Input(", ".join(self._tags), placeholder="prod, db", id="tags_input"),
+                )
+            )
+            rows.append(
+                row(
+                    "Notes",
+                    TextArea(self._notes, id="notes_input", language=None),
                 )
             )
 
@@ -562,11 +576,17 @@ class AddEditHostModal(
         pin_v = (self.query_one("#pin_toggle", Select).value or "no") if self.query("#pin_toggle") else "no"
         tags_v = self.query_one("#tags_input", Input).value if self.query("#tags_input") else ""
         tags_list = [t.strip() for t in tags_v.split(",") if t.strip()]
+        notes_v = (
+            self.query_one("#notes_input", TextArea).text.strip()
+            if self.query("#notes_input")
+            else ""
+        )
 
         meta: Dict[str, object] = {
             "favorite": _is_yes(fav_v),
             "pinned": _is_yes(pin_v),
             "tags": tags_list,
+            "notes": notes_v,
         }
 
         self.dismiss((alias, opts, extras, ov, meta))

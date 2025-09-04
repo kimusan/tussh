@@ -1,5 +1,5 @@
-#host-list { width: 36%; min-width: 24; border: round #444; }
-#details { border: round #444; }
+#host-list { width: 36%; min-width: 24; border: round $accent; border-title-color: $accent; }
+#details { border: round $accent; border-title-color: $accent; }
 .buttons {  margin: 2; height:auto; margin:0 }
 
 ModalScreen { align: center middle; }
@@ -9,7 +9,8 @@ ModalScreen { align: center middle; }
   max-width: 100;
   height: 90%;
   max-height: 90%;
-  border: round dodgerblue;
+  border: round $accent;
+  border-title-color: $accent;
   padding: 1 2;
   background: $panel;
   overflow: auto;  /* allow modal content to scroll when long */
@@ -25,6 +26,9 @@ ModalScreen { align: center middle; }
 #details { height: 1fr; }
 #list { height: 1fr; }
 #table { height: 1fr; }
+
+/* Notes markdown block below details table */
+#notes { width: 100%; border: round $accent; border-title-color: $accent; padding: 1; margin-top: 1; }
 
 /* Ensure form fields render full control height */
 .form-field { width: 100%; margin: 1 0; }
@@ -69,7 +73,8 @@ Horizontal { height:auto;}
   width: 60%;
   max-width: 100;
   height: 100%;
-  border: round dodgerblue;
+  border: round $accent;
+  border-title-color: $accent;
   padding: 1 2;
   background: $panel;
   /* Start fully off-screen to the right */
@@ -77,5 +82,5 @@ Horizontal { height:auto;}
   transition: offset 200ms in_out_cubic;
 }
 #help.show { offset-x: 0; }
-#help #help-title { text-style: bold; }
+#help #help-title { /* removed label; keep rule for backward compatibility */ }
 #help Button { height: 3; margin-top: 1; }

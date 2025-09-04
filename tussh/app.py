@@ -21,6 +21,7 @@ from textual.widgets import (
     ListView,
     ListItem,
     Label,
+    Markdown,
 )
 
 from .config_io import (
@@ -105,6 +106,7 @@ class TusshApp(App):
             with Vertical(id="details"):
                 yield Label("Details", id="details-title")
                 yield DataTable(id="table")
+                yield Markdown("", id="notes")
                 yield Static("", id="cmdline")
                 yield Static("", id="status")
         yield Footer()
@@ -148,6 +150,14 @@ class TusshApp(App):
             if hasattr(hp, "border_title"):
                 setattr(hp, "border_title", "Help")
             hp.styles.border_title = "Help"
+        except Exception:
+            pass
+        # Set notes panel border title
+        try:
+            md = self.query_one("#notes", Markdown)
+            if hasattr(md, "border_title"):
+                setattr(md, "border_title", "Notes")
+            md.styles.border_title = "Notes"
         except Exception:
             pass
 
@@ -234,6 +244,8 @@ class TusshApp(App):
             "- Add tags in Add/Edit (comma-separated)\n"
             "- Filter by tag using '#tag' or 'tag:tag'\n"
             "- Pinned hosts sort first; favorites show with a star\n\n"
+            "[b]Notes[/b]\n"
+            "- Add a short note per host in Add/Edit; shown in details\n\n"
             "[b]Themes[/b]\n"
             "- Press Ctrl-P and pick a theme; TuSSH saves and restores it\n\n"
             "[b]Connecting[/b]\n"
@@ -291,8 +303,25 @@ class TusshApp(App):
         alias = self._current_alias()
         if not alias or not self._idx:
             self._update_cmd_preview()
+            try:
+                notes_md = self.query_one("#notes", Markdown)
+                notes_md.update("")
+                notes_md.display = False
+            except Exception:
+                pass
             return
-        # Show tags (if any) at the top
+        # Update notes markdown block below the table
+        note = self._settings.host_notes.get(alias, "").strip()
+        try:
+            notes_md = self.query_one("#notes", Markdown)
+            if note:
+                notes_md.update(note)
+                notes_md.display = True
+            else:
+                notes_md.update("")
+                notes_md.display = False
+        except Exception:
+            pass
         tags = self._settings.host_tags.get(alias, [])
         if tags:
             table.add_row("Tags", ", ".join(tags))
@@ -524,7 +553,7 @@ class TusshApp(App):
                 self._settings.host_overrides[alias] = ov
             else:
                 self._settings.host_overrides.pop(alias, None)
-            # Apply metadata (favorite, pinned, tags)
+            # Apply metadata (favorite, pinned, tags, notes)
             fav_set = set(self._settings.favorites or [])
             pin_set = set(self._settings.pinned or [])
             if meta:
@@ -544,6 +573,12 @@ class TusshApp(App):
                         self._settings.host_tags[alias] = tags_list
                     else:
                         self._settings.host_tags.pop(alias, None)
+                if isinstance(meta.get("notes"), str):
+                    note_val = str(meta["notes"]).strip()
+                    if note_val:
+                        self._settings.host_notes[alias] = note_val
+                    else:
+                        self._settings.host_notes.pop(alias, None)
             self._settings.favorites = sorted(fav_set)
             self._settings.pinned = sorted(pin_set)
             self._settings.save()

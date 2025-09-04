@@ -26,6 +26,7 @@ class UserSettings:
     favorites: List[str] = field(default_factory=list)
     pinned: List[str] = field(default_factory=list)
     host_tags: Dict[str, List[str]] = field(default_factory=dict)
+    host_notes: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls) -> "UserSettings":
@@ -88,6 +89,18 @@ class UserSettings:
                 vals = _clean_list(v)
                 ht_clean[key] = vals
 
+        # Clean host notes mapping -> str
+        host_notes_raw = data.get("host_notes") or {}
+        notes_clean: Dict[str, str] = {}
+        if isinstance(host_notes_raw, dict):
+            for k, v in host_notes_raw.items():
+                try:
+                    key = str(k)
+                    val = str(v)
+                except Exception:
+                    continue
+                notes_clean[key] = val
+
         return cls(
             extra_args=data.get("extra_args", ""),
             ssh_config_path=data.get("ssh_config_path"),
@@ -98,6 +111,7 @@ class UserSettings:
             favorites=favorites_v,
             pinned=pinned_v,
             host_tags=ht_clean,
+            host_notes=notes_clean,
         )
 
     def save(self) -> None:
