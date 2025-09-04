@@ -19,6 +19,8 @@ class UserSettings:
     extra_args: str = ""
     ssh_config_path: Optional[str] = None
     client: str = "ssh"  # "ssh" or "mosh"
+    # Textual theme name selected via palette (e.g. "monokai")
+    theme: Optional[str] = None
     usage: Dict[str, int] = field(default_factory=dict)
     host_overrides: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
@@ -53,10 +55,15 @@ class UserSettings:
                 str(k): str(v) for k, v in od.items() if isinstance(k, str)
             }
 
+        theme_v = data.get("theme")
+        if not isinstance(theme_v, str) or not theme_v.strip():
+            theme_v = None
+
         return cls(
             extra_args=data.get("extra_args", ""),
             ssh_config_path=data.get("ssh_config_path"),
             client=data.get("client", "ssh"),
+            theme=theme_v,
             usage=usage_int,
             host_overrides=ho_clean,
         )

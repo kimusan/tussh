@@ -10,7 +10,9 @@ A fast, responsive Textual TUI for browsing and launching SSH hosts from your Op
 
 - Reads `~/.ssh/config` (plus `Include` globs); applies OpenSSH “first match wins”
 - Lists only explicit aliases (wildcards still affect merged options)
-- Clean handoff on connect: the app exits, then runs SSH/Mosh to avoid UI mixing
+- Seamless connect flow: the app stays running, suspends the TUI while SSH/Mosh
+  runs in your terminal, and resumes the UI after you disconnect
+- Theme persistence: pick a theme via Ctrl-P palette; tussh saves and restores it
 - Add/Edit/Delete host blocks (writes only to primary config)
 - Options modal for global extra ssh args and a custom config path
 - Choose client: SSH or Mosh (extra SSH args passed to mosh via `--ssh`)
@@ -25,7 +27,7 @@ poetry run tussh
 
 # or, after publishing
 pip install tussh
-tnussh
+tussh
 ```
 
 ## Usage
@@ -39,6 +41,7 @@ tnussh
 - `d`: Delete selected host (with confirmation)
 - `o`: Open Options
 - `Esc` or `q`: Quit (also closes an open modal)
+- Ctrl-P: Open the palette (pick themes; your choice is saved)
 
 ### UI overview
 
@@ -79,13 +82,18 @@ tnussh
 - macOS: `~/Library/Application Support/tussh/settings.json`
 - Windows: `%APPDATA%\tussh\settings.json`
 
-Settings include `extra_args`, `ssh_config_path`, `client`, and `usage` counts.
+Settings include `extra_args`, `ssh_config_path`, `client`, `usage` counts, and
+`theme` (the selected Textual theme name).
 
 ## Connecting
 
 - SSH: runs `ssh <alias> [extra args]`
 - Mosh: runs `mosh [--ssh="ssh <extra args>"] <alias>`
-- The app exits first, then your shell process `exec`s the command for a clean TTY session.
+- The TUI is suspended while the connection runs, so SSH/Mosh owns the TTY.
+  The screen is cleared and a brief “Connecting to <alias> …” line is printed.
+  When you disconnect, tussh resumes instantly without restarting.
+  If `suspend` isn’t available in your Textual version, tussh falls back to
+  the previous behavior and `exec`s the client.
 
 ## Troubleshooting
 
@@ -94,6 +102,9 @@ Settings include `extra_args`, `ssh_config_path`, `client`, and `usage` counts.
   - If it still doesn’t work, check your Textual version and report the issue
 - `ssh`/`mosh` not found:
   - Install the client and ensure it’s on `PATH`
+- Theme not persisting:
+  - Open the palette with Ctrl-P, select a theme; the chosen theme name is
+    saved to `settings.json` under `theme` and restored at startup
 - Can’t edit/delete a host:
   - The host may live in an included file or a multi-alias block; the app will tell you what to change
 

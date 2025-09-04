@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import subprocess
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -61,6 +62,12 @@ class TusshApp(App):
     def __init__(self) -> None:
         super().__init__()
         self._settings = UserSettings.load()
+        # Apply saved theme as early as possible
+        try:
+            if getattr(self._settings, "theme", None):
+                self.theme = str(self._settings.theme)
+        except Exception:
+            pass
 
     def _alias_from_item(self, item: ListItem) -> str:
         # Preferred: our subclassed item has .alias
@@ -94,6 +101,17 @@ class TusshApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        # Subscribe to theme changes from Ctrl-P palette and persist them
+        try:
+            self.theme_changed_signal.subscribe(self, self.on_theme_changed)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        # Apply persisted Textual theme (selected via palette)
+        if getattr(self._settings, "theme", None):
+            try:
+                self.theme = str(self._settings.theme)
+            except Exception:
+                pass
         cfg_path = (
             Path(self._settings.ssh_config_path)
             if self._settings.ssh_config_path
@@ -237,16 +255,49 @@ class TusshApp(App):
                 # Quote inside to keep as one argument
                 args.append(f"--ssh=ssh {extra}")
             args.append(alias)
-            # Exit app and return the argv to the caller (cli.py) to exec cleanly
-            self.exit(args)
         else:
             args = ["ssh"]
             extra = (hov.get("extra_args") or self._settings.extra_args).strip()
             if extra:
                 args.extend(shlex.split(extra))
             args.append(alias)
-            # Exit app and return argv; the CLI will exec
+
+        # Prefer running the process while suspending Textual, so the app
+        # stays alive and resumes when the user disconnects.
+        suspend_cm = getattr(self, "suspend", None)
+        if suspend_cm is None:
+            # Fallback to previous behavior if Textual doesn't support suspend
             self.exit(args)
+            return
+
+        self._set_status(f"Connecting to {alias} …")
+        rc = 0
+        try:
+            with suspend_cm():  # type: ignore[misc]
+                try:
+                    # Clear terminal and print a helpful line that remains visible
+                    os.system("clear")
+                except Exception:
+                    pass
+                try:
+                    print(f"Connecting to {alias} …")
+                except Exception:
+                    pass
+                try:
+                    rc = subprocess.call(args)
+                except FileNotFoundError:
+                    print(f"Error: '{args[0]}' not found on PATH.")
+                    rc = 127
+        except Exception:
+            # If suspension failed for any reason, fall back to exiting to exec
+            self.exit(args)
+            return
+
+        # Back in the app after disconnect; reflect result in status
+        if rc == 0:
+            self._set_status(f"Disconnected from {alias}")
+        else:
+            self._set_status(f"[error] Connection exited with code {rc}")
 
     def action_add(self) -> None:
         av = hosts_list(self._idx) if self._idx else []
@@ -371,3 +422,39 @@ class TusshApp(App):
 
     def action_quit(self) -> None:
         self.exit()
+
+    # ---- Theme persistence (palette-driven)
+    def on_theme_changed(self, theme) -> None:  # type: ignore[override]
+        # Persist theme chosen via Ctrl-P palette (payload may vary by Textual version)
+        try:
+            name: Optional[str] = None
+            # Direct string
+            if isinstance(theme, str):
+                name = theme
+            else:
+                # Theme object with .name
+                n = getattr(theme, "name", None)
+                if isinstance(n, str):
+                    name = n
+                else:
+                    # Message-like payload with .theme which may be object or string
+                    t = getattr(theme, "theme", None)
+                    if isinstance(t, str):
+                        name = t
+                    else:
+                        tn = getattr(t, "name", None)
+                        if isinstance(tn, str):
+                            name = tn
+            if name:
+                self._settings.theme = name
+                self._settings.save()
+        except Exception:
+            pass
+
+    # Fallback for versions where App.theme is reactive and watchable
+    def watch_theme(self, theme: str) -> None:  # type: ignore[override]
+        try:
+            self._settings.theme = str(theme)
+            self._settings.save()
+        except Exception:
+            pass

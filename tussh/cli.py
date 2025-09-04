@@ -11,6 +11,13 @@ def main() -> None:
     if isinstance(result, list) and result and isinstance(result[0], str):
         argv: List[str] = result
         prog = argv[0]
+        # Print a friendly connection line that remains visible during startup
+        try:
+            target = argv[-1] if len(argv) > 0 else ""
+            sys.stdout.write(f"Connecting to {target} …\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
         try:
             os.execvp(prog, argv)
         except FileNotFoundError:
