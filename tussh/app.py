@@ -43,6 +43,7 @@ from .widgets import HostItem
 
 class TusshApp(App):
     CSS_PATH = "styles.tcss"
+    TITLE = "TuSSH"
 
     BINDINGS = [
         Binding("enter", "connect", "Connect"),
@@ -65,6 +66,10 @@ class TusshApp(App):
 
     def __init__(self) -> None:
         super().__init__()
+        try:
+            self.title = "TuSSH"
+        except Exception:
+            pass
         self._settings = UserSettings.load()
         # Apply saved theme as early as possible
         try:
@@ -218,7 +223,7 @@ class TusshApp(App):
 
     def _help_text(self) -> str:
         return (
-            "[b]Tussh — Help[/b]\n\n"
+            "[b]TuSSH — Help[/b]\n\n"
             "[b]Navigation[/b]\n"
             "- Arrow keys / j,k: Move selection\n"
             "- / : Focus filter; type to filter (Esc to exit)\n"
@@ -230,7 +235,7 @@ class TusshApp(App):
             "- Filter by tag using '#tag' or 'tag:tag'\n"
             "- Pinned hosts sort first; favorites show with a star\n\n"
             "[b]Themes[/b]\n"
-            "- Press Ctrl-P and pick a theme; tussh saves and restores it\n\n"
+            "- Press Ctrl-P and pick a theme; TuSSH saves and restores it\n\n"
             "[b]Connecting[/b]\n"
             "- TUI suspends while SSH/Mosh runs; resumes after disconnect\n"
             "- Command preview shows the effective argv\n"
