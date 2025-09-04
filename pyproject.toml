@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "tussh"
+version = "0.1.0"
+description = "A fast, responsive Textual TUI for managing and launching SSH hosts from your OpenSSH config."
+authors = ["Kim Schulz <kim@schulz.dk>"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "tussh" }]
+include = [
+    "tussh/styles.tcss",
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10, <4.0.0"
+textual = ">=0.58.0"
+platformdirs = ">=4.0.0"
+
+[tool.poetry.scripts]
+tussh = "tussh.cli:main"
+
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.4.0"
+mypy = ">=1.8.0"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,63 @@
+#host-list { width: 36%; min-width: 24; border: round #444; }
+#details { border: round #444; }
+.buttons {  margin: 2; height:auto; margin:0 }
+
+ModalScreen { align: center middle; }
+
+#modal {
+  width: 80%;
+  max-width: 100;
+  height: 90%;
+  max-height: 90%;
+  border: round dodgerblue;
+  padding: 1 2;
+  background: $panel;
+  overflow: auto;  /* allow modal content to scroll when long */
+}
+.modal-body { padding: 1; margin: 0; }
+#confirm-title, #host-form-title, #opt-title { text-style: bold; }
+
+/* Ensure the details table takes full width and stays stable */
+#table { width: 100%; }
+
+/* Make lists/tables fill available height and scroll */
+#host-list { height: 1fr; }
+#details { height: 1fr; }
+#list { height: 1fr; }
+#table { height: 1fr; }
+
+/* Ensure form fields render full control height */
+.form-field { width: 100%; margin: 1 0; }
+.form-field Input { height: 3; }
+.modal-body Button { height: 3; }
+
+/* Let the scrollable body take available space within the modal */
+#modal_scroll { height: 1fr; }
+#rows_scroll { height: 1fr; }
+#opts_scroll { height: 1fr; }
+
+/* Fallback: ensure all inputs/buttons in modal have sensible height */
+#modal Input { height: 3; }
+#modal Button { height: 3;}
+#modal > Vertical {
+  height: 1fr;
+  margin: 0;
+}
+.jb_chain {
+    height:auto;
+  }
+Horizontal { height:auto;}
+#jb-buttons {
+    height:auto;
+  }
+/* Two-column rows for Add/Edit form */
+.form-row { width: 100%; align: left middle; height: auto; margin: 0;  }
+.form-row > .form-label { width: 28; }
+.form-row > Input { width: 1fr; height: 3; }
+.form-row > Select { width: 1fr; }
+.form-row > TextArea { width: 1fr; height: 3;  }
+.form-row > Vertical { width: 1fr; }
+.jb-select { width: 1fr; }
+#jb_panel { width: 1fr; height:auto; }
+#jb_panel TextArea { height: 2; }
+.form-section { margin: 1 0; }
