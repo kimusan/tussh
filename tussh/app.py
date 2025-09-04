@@ -55,6 +55,7 @@ class TusshApp(App):
         Binding("o", "options", "Options"),
         Binding("p", "toggle_pin", "Pin"),
         Binding("f", "toggle_favorite", "Fav"),
+        Binding("t", "toggle_tags", "Tags"),
         Binding("?", "toggle_help", "Help"),
         Binding("escape", "quit", "Quit"),
         Binding("q", "quit", show=False),
@@ -173,7 +174,8 @@ class TusshApp(App):
         pin_set = set(self._settings.pinned or [])
         all_hosts.sort(key=lambda a: (-1 if a in pin_set else 0, -self._settings.usage.get(a, 0), a.casefold()))
         for host in all_hosts:
-            lst.append(HostItem(host, display=self._display_for_host(host)))
+            markers, chips = self._markers_and_chips(host)
+            lst.append(HostItem(host, markers=markers, chips=chips))
         if all_hosts:
             lst.index = 0
             self.selected_alias = all_hosts[0]
@@ -216,18 +218,14 @@ class TusshApp(App):
         fg = "white" if bg in very_dark else "black"
         return f"[{fg} on {bg}]#{tag}[/]"
 
-    def _display_for_host(self, host: str) -> str:
+    def _markers_and_chips(self, host: str) -> tuple[str, str]:
         pin_set = set(self._settings.pinned or [])
         fav_set = set(self._settings.favorites or [])
-        prefix = ""
-        if host in pin_set:
-            prefix += "📌 "
-        if host in fav_set:
-            prefix += "★ "
-        chips = " ".join(self._tag_chip(t) for t in (self._settings.host_tags.get(host, [])))
-        if chips:
-            return f"{prefix}{host} {chips}"
-        return f"{prefix}{host}"
+        markers = ("📌" if host in pin_set else "") + ("★" if host in fav_set else "")
+        chips = ""
+        if self._settings.show_tags_in_list:
+            chips = " ".join(self._tag_chip(t) for t in (self._settings.host_tags.get(host, [])))
+        return markers, chips
 
     # ---- Help dock ----
 
@@ -239,7 +237,7 @@ class TusshApp(App):
             "- / : Focus filter; type to filter (Esc to exit)\n"
             "- Enter: Connect to selected host\n\n"
             "[b]Actions[/b]\n"
-            "- a: Add host\n- e: Edit host\n- d: Delete host\n- r: Raw edit\n- o: Options\n- p: Toggle pin\n- f: Toggle favorite\n- ?: Toggle help\n- Esc/q: Quit\n\n"
+            "- a: Add host\n- e: Edit host\n- d: Delete host\n- r: Raw edit\n- o: Options\n- p: Toggle pin\n- f: Toggle favorite\n- t: Toggle tag chips in list\n- ?: Toggle help\n- Esc/q: Quit\n\n"
             "[b]Tags & Filtering[/b]\n"
             "- Add tags in Add/Edit (comma-separated)\n"
             "- Filter by tag using '#tag' or 'tag:tag'\n"
@@ -351,8 +349,9 @@ class TusshApp(App):
         self.action_connect()
 
     def on_list_view_selected(self, _: ListView.Selected) -> None:
-        # Some Textual versions emit Selected on Enter
-        self.action_connect()
+        # Mouse single-click selects only; do not connect here.
+        # Enter is handled via key binding; double-click triggers Submitted.
+        pass
 
     def action_focus_filter(self) -> None:
         self.query_one("#filter", Input).focus()
@@ -382,7 +381,8 @@ class TusshApp(App):
         pin_set = set(self._settings.pinned or [])
         filtered.sort(key=lambda a: (-1 if a in pin_set else 0, -self._settings.usage.get(a, 0), a.casefold()))
         for host in filtered:
-            lst.append(HostItem(host, display=self._display_for_host(host)))
+            markers, chips = self._markers_and_chips(host)
+            lst.append(HostItem(host, markers=markers, chips=chips))
         if filtered:
             lst.index = 0
             self.selected_alias = filtered[0]
@@ -642,6 +642,22 @@ class TusshApp(App):
                 lst.index = i
                 self.selected_alias = sel
                 break
+
+    def action_toggle_tags(self) -> None:
+        # Toggle visibility of tag chips in the list; persist and refresh
+        self._settings.show_tags_in_list = not bool(self._settings.show_tags_in_list)
+        self._settings.save()
+        state = "shown" if self._settings.show_tags_in_list else "hidden"
+        self._set_status(f"List tags {state}")
+        sel = self._current_alias()
+        self.reload_index(self._idx.primary)  # type: ignore[union-attr]
+        if sel:
+            lst = self.query_one("#list", ListView)
+            for i, child in enumerate(lst.children):
+                if getattr(child, "alias", None) == sel:
+                    lst.index = i
+                    self.selected_alias = sel
+                    break
 
     def action_delete(self) -> None:
         alias = self._current_alias()

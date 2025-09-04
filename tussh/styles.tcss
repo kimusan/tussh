@@ -66,6 +66,12 @@ Horizontal { height:auto;}
 #jb_panel TextArea { height: 2; }
 .form-section { margin: 1 0; }
 
+/* Host list item alignment */
+.hi-row { width: 100%; align: left middle; }
+.hi-markers { width: 4; content-align: right middle; }
+.hi-alias { width: 1fr; padding-left: 1; }
+.hi-chips { width: auto; }
+
 /* Help dock overlay */
 #help {
   layer: overlay;

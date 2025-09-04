@@ -1,18 +1,26 @@
 from __future__ import annotations
 
-from textual.widgets import ListItem, Label
+from textual.containers import Horizontal
+from textual.widgets import ListItem, Label, Static
 from rich.text import Text
 
 
 class HostItem(ListItem):
-    """List row that always carries its alias explicitly.
+    """List row which renders markers, alias, and tag chips in aligned columns.
 
-    Optionally shows a different display label (e.g., with markers) while keeping
-    the underlying alias intact for logic.
+    Keeps `alias` as a plain attribute for selection/logic regardless of styling.
     """
 
-    def __init__(self, alias: str, display: str | None = None) -> None:
-        # Render any markup as styled text chips
-        renderable = Text.from_markup(display or alias)
-        super().__init__(Label(renderable))
+    def __init__(self, alias: str, *, markers: str = "", chips: str = "") -> None:
+        markers_text = Text.from_markup(markers) if markers else Text("")
+        alias_text = Text(alias)
+        chips_text = Text.from_markup(chips) if chips else Text("")
+
+        row = Horizontal(
+            Static(markers_text, classes="hi-markers"),
+            Static(alias_text, classes="hi-alias"),
+            Static(chips_text, classes="hi-chips"),
+            classes="hi-row",
+        )
+        super().__init__(row)
         self.alias = alias
