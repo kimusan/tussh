@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tussh"
-version = "0.2.0"
+version = "0.3.0"
 description = "A fast, responsive Textual TUI for managing and launching SSH hosts from your OpenSSH config."
 authors = ["Kim Schulz <kim@schulz.dk>"]
 license = "MIT"
