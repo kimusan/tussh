@@ -106,6 +106,7 @@ class TusshApp(App):
                 yield ListView(id="list")
             with Vertical(id="details"):
                 yield Label("Details", id="details-title")
+                yield Static("", id="ro-indicator")
                 yield DataTable(id="table")
                 yield Markdown("", id="notes")
                 yield Static("", id="cmdline")
@@ -153,6 +154,8 @@ class TusshApp(App):
             hp.styles.border_title = "Help"
         except Exception:
             pass
+        # Apply read-only mode UI/keys
+        self._apply_read_only_state()
         # Set notes panel border title
         try:
             md = self.query_one("#notes", Markdown)
@@ -191,6 +194,30 @@ class TusshApp(App):
 
     def _set_status(self, msg: str) -> None:
         self.query_one("#status", Static).update(msg)
+
+    def _apply_read_only_state(self) -> None:
+        # Update indicator label and hide/show bindings in footer if possible
+        ro = bool(getattr(self._settings, "read_only", False))
+        try:
+            ind = self.query_one("#ro-indicator", Static)
+            if ro:
+                ind.update("[b][red]READ-ONLY MODE[/red][/b]")
+                ind.display = True
+            else:
+                ind.update("")
+                ind.display = False
+        except Exception:
+            pass
+        # Best-effort: hide add/edit/delete bindings from footer
+        try:
+            # Textual's bindings collection (internal API may vary)
+            binds = getattr(self, "bindings", None)
+            if binds is not None:
+                for b in getattr(binds, "_bindings", []):
+                    if getattr(b, "action", "") in {"add", "edit", "delete"}:
+                        b.show = not ro
+        except Exception:
+            pass
 
     # ---- Tag rendering helpers
 
@@ -456,6 +483,10 @@ class TusshApp(App):
             self._set_status(f"[error] Connection exited with code {rc}")
 
     def action_add(self) -> None:
+        if getattr(self._settings, "read_only", False):
+            self._set_status("Read-only mode: Add is disabled")
+            self.bell()
+            return
         av = hosts_list(self._idx) if self._idx else []
         self.push_screen(
             AddEditHostModal(
@@ -473,6 +504,10 @@ class TusshApp(App):
         )
 
     def action_edit(self) -> None:
+        if getattr(self._settings, "read_only", False):
+            self._set_status("Read-only mode: Edit is disabled")
+            self.bell()
+            return
         alias = self._current_alias()
         if not alias or not self._idx:
             self.bell()
@@ -660,6 +695,10 @@ class TusshApp(App):
                     break
 
     def action_delete(self) -> None:
+        if getattr(self._settings, "read_only", False):
+            self._set_status("Read-only mode: Delete is disabled")
+            self.bell()
+            return
         alias = self._current_alias()
         if not alias:
             self.bell()
@@ -690,6 +729,7 @@ class TusshApp(App):
         if settings is None:
             return
         self._settings = settings
+        self._apply_read_only_state()
         # Possibly re-read index if config_path changed
         path = (
             Path(self._settings.ssh_config_path)

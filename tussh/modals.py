@@ -60,6 +60,12 @@ class OptionsModal(ModalScreen[UserSettings]):
             Vertical(
                 VerticalScroll(
                     Vertical(
+                        Label("Mode:"),
+                        Select(
+                            (("Read/Write", "rw"), ("Read-Only", "ro")),
+                            value=("ro" if getattr(self._settings, "read_only", False) else "rw"),
+                            id="mode_select",
+                        ),
                         Label("Connection client (ssh or mosh):"),
                         Select(
                             (
@@ -99,9 +105,11 @@ class OptionsModal(ModalScreen[UserSettings]):
             extra = self.query_one("#extra_args", Input).value.strip()
             cfgp = self.query_one("#config_path", Input).value.strip() or None
             client = self.query_one("#client_select", Select).value or "ssh"
+            mode = self.query_one("#mode_select", Select).value or "rw"
             self._settings.extra_args = extra
             self._settings.ssh_config_path = cfgp
             self._settings.client = client
+            self._settings.read_only = (mode == "ro")
             self._settings.save()
             self.dismiss(self._settings)
         else:

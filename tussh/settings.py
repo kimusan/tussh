@@ -28,6 +28,7 @@ class UserSettings:
     host_tags: Dict[str, List[str]] = field(default_factory=dict)
     host_notes: Dict[str, str] = field(default_factory=dict)
     show_tags_in_list: bool = True
+    read_only: bool = False
 
     @classmethod
     def load(cls) -> "UserSettings":
@@ -114,6 +115,7 @@ class UserSettings:
             host_tags=ht_clean,
             host_notes=notes_clean,
             show_tags_in_list=bool(data.get("show_tags_in_list", True)),
+            read_only=bool(data.get("read_only", False)),
         )
 
     def save(self) -> None:
