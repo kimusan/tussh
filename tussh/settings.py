@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 import json as _json
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 from platformdirs import user_config_dir
 
@@ -29,6 +29,8 @@ class UserSettings:
     host_notes: Dict[str, str] = field(default_factory=dict)
     show_tags_in_list: bool = True
     read_only: bool = False
+    # Recent failed connections log: list of {time, alias, cmd, code}
+    connect_errors: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def load(cls) -> "UserSettings":
@@ -103,6 +105,22 @@ class UserSettings:
                     continue
                 notes_clean[key] = val
 
+        # Clean failed connections log
+        errors_raw = data.get("connect_errors") or []
+        errors_clean: List[Dict[str, Any]] = []
+        if isinstance(errors_raw, list):
+            for e in errors_raw:
+                if not isinstance(e, dict):
+                    continue
+                alias = str(e.get("alias", ""))
+                cmd = str(e.get("cmd", ""))
+                try:
+                    code = int(e.get("code", 0))
+                except Exception:
+                    code = 0
+                t = str(e.get("time", ""))
+                errors_clean.append({"alias": alias, "cmd": cmd, "code": code, "time": t})
+
         return cls(
             extra_args=data.get("extra_args", ""),
             ssh_config_path=data.get("ssh_config_path"),
@@ -116,6 +134,7 @@ class UserSettings:
             host_notes=notes_clean,
             show_tags_in_list=bool(data.get("show_tags_in_list", True)),
             read_only=bool(data.get("read_only", False)),
+            connect_errors=errors_clean,
         )
 
     def save(self) -> None:

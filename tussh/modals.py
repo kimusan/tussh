@@ -7,7 +7,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Collapsible, Input, Label, Select, Static, TextArea
+from textual.widgets import Button, Collapsible, Input, Label, Select, Static, TextArea, Log
 
 from .config_io import BOOL_KEYS, COMMON_FIELDS_ORDER, default_ssh_config_path
 from .settings import UserSettings
@@ -600,4 +600,126 @@ class AddEditHostModal(
         self.dismiss((alias, opts, extras, ov, meta))
 
     def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class LogModal(ModalScreen[None]):
+    """Shows the live SSH stderr log with copy/clear controls."""
+
+    BINDINGS = [
+        Binding("escape", "close", show=False),
+        Binding("c", "copy", "Copy last command"),
+        Binding("x", "clear", "Clear"),
+    ]
+
+    def __init__(self, log_path: str) -> None:
+        super().__init__()
+        self._log_path = log_path
+        self._pos = 0
+        self._log: Log | None = None
+
+    def compose(self) -> ComposeResult:
+        log = Log(id="log_view")
+        log.can_focus = True
+        self._log = log
+        yield Container(
+            Vertical(
+                Label("SSH stderr log (latest at bottom)"),
+                log,
+                Horizontal(
+                    Button("Copy last command", id="copy"),
+                    Button("Clear", id="clear"),
+                    Button("Close", id="close"),
+                    classes="buttons",
+                ),
+                classes="modal-body",
+            ),
+            id="modal",
+        )
+
+    def on_mount(self) -> None:
+        modal = self.query_one("#modal", Container)
+        if hasattr(modal, "border_title"):
+            setattr(modal, "border_title", "Logs")
+        modal.styles.border_title = "Logs"
+        self._pos = 0
+        self._load_all()
+        # Periodically tail the file
+        self.set_interval(0.5, self._tail_once)
+
+    def _load_all(self) -> None:
+        try:
+            data = open(self._log_path, "r", encoding="utf-8", errors="ignore").read()
+        except OSError:
+            data = ""
+        self._pos = len(data.encode("utf-8"))
+        lg = self._log or self.query_one("#log_view", Log)
+        lg.clear()
+        if data:
+            for line in data.splitlines():
+                lg.write_line(line)
+            lg.scroll_end(animate=False)
+
+    def _tail_once(self) -> None:
+        try:
+            with open(self._log_path, "rb") as f:
+                f.seek(self._pos)
+                chunk = f.read()
+                if not chunk:
+                    return
+                self._pos += len(chunk)
+                text = chunk.decode("utf-8", errors="ignore")
+        except OSError:
+            return
+        lg = self._log or self.query_one("#log_view", Log)
+        for line in text.splitlines():
+            lg.write_line(line)
+        lg.scroll_end(animate=False)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "copy":
+            self.action_copy()
+        elif event.button.id == "clear":
+            self.action_clear()
+        elif event.button.id == "close":
+            self.action_close()
+
+    def action_copy(self) -> None:
+        # Copy the last connection command from the log header line
+        try:
+            data = open(self._log_path, "r", encoding="utf-8", errors="ignore").read().splitlines()
+        except OSError:
+            return
+        header = None
+        for line in reversed(data):
+            if line.startswith("----- connection:"):
+                header = line
+                break
+        if not header:
+            return
+        # Expect format: ----- connection: alias=<alias> cmd=<cmd> time=<...> -----
+        cmd = None
+        parts = header.split()
+        for p in parts:
+            if p.startswith("cmd="):
+                cmd = p[len("cmd=") :]
+                break
+        if cmd:
+            try:
+                self.app.copy_to_clipboard(cmd)  # type: ignore[attr-defined]
+                self.app.bell()
+            except Exception:
+                pass
+
+    def action_clear(self) -> None:
+        try:
+            with open(self._log_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except OSError:
+            pass
+        self._pos = 0
+        lg = self._log or self.query_one("#log_view", Log)
+        lg.clear()
+
+    def action_close(self) -> None:
         self.dismiss(None)

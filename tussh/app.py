@@ -34,8 +34,8 @@ from .config_io import (
     delete_host,
     COMMON_FIELDS_ORDER,
 )
-from .modals import ConfirmModal, OptionsModal, AddEditHostModal
-from .settings import UserSettings
+from .modals import ConfirmModal, OptionsModal, AddEditHostModal, LogModal
+from .settings import UserSettings, CONFIG_DIR
 from .widgets import HostItem
 
 
@@ -53,6 +53,7 @@ class TusshApp(App):
         Binding("d", "delete", "Delete"),
         Binding("r", "raw_edit", "Raw Edit"),
         Binding("o", "options", "Options"),
+        Binding("l", "logs", "Logs"),
         Binding("p", "toggle_pin", "Pin"),
         Binding("f", "toggle_favorite", "Fav"),
         Binding("t", "toggle_tags", "Tags"),
@@ -73,6 +74,21 @@ class TusshApp(App):
         except Exception:
             pass
         self._settings = UserSettings.load()
+        # Prepare stderr log path and clear at startup
+        try:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            self._log_path = str((CONFIG_DIR / "ssh_errors.log").resolve())
+            with open(self._log_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            self._log_path = "/tmp/tussh_errors.log"
+            try:
+                with open(self._log_path, "w", encoding="utf-8") as f:
+                    f.write("")
+            except Exception:
+                pass
+        # Track Enter key to distinguish from mouse selection
+        self._enter_pending: bool = False
         # Apply saved theme as early as possible
         try:
             if getattr(self._settings, "theme", None):
@@ -264,7 +280,7 @@ class TusshApp(App):
             "- / : Focus filter; type to filter (Esc to exit)\n"
             "- Enter: Connect to selected host\n\n"
             "[b]Actions[/b]\n"
-            "- a: Add host\n- e: Edit host\n- d: Delete host\n- r: Raw edit\n- o: Options\n- p: Toggle pin\n- f: Toggle favorite\n- t: Toggle tag chips in list\n- ?: Toggle help\n- Esc/q: Quit\n\n"
+            "- a: Add host\n- e: Edit host\n- d: Delete host\n- r: Raw edit\n- o: Options\n- p: Toggle pin\n- f: Toggle favorite\n- t: Toggle tag chips in list\n- l: Open logs (copy failed commands)\n- ?: Toggle help\n- Esc/q: Quit\n\n"
             "[b]Tags & Filtering[/b]\n"
             "- Add tags in Add/Edit (comma-separated)\n"
             "- Filter by tag using '#tag' or 'tag:tag'\n"
@@ -378,7 +394,17 @@ class TusshApp(App):
     def on_list_view_selected(self, _: ListView.Selected) -> None:
         # Mouse single-click selects only; do not connect here.
         # Enter is handled via key binding; double-click triggers Submitted.
-        pass
+        if getattr(self, "_enter_pending", False):
+            self._enter_pending = False
+            self.action_connect()
+
+    def on_key(self, event) -> None:  # type: ignore[override]
+        try:
+            k = getattr(event, "key", None)
+            if k == "enter":
+                self._enter_pending = True
+        except Exception:
+            pass
 
     def action_focus_filter(self) -> None:
         self.query_one("#filter", Input).focus()
@@ -457,8 +483,23 @@ class TusshApp(App):
         rc = 0
         try:
             with suspend_cm():  # type: ignore[misc]
+                # Prepare stderr log and header
                 try:
-                    # Clear terminal and print a helpful line that remains visible
+                    from datetime import datetime
+                    cmdline = shlex.join(args)
+                except Exception:
+                    cmdline = " ".join(args)
+                header = (
+                    f"----- connection: alias={alias} cmd={cmdline} time="
+                    f"{__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -----\n"
+                )
+                try:
+                    with open(self._log_path, "a", encoding="utf-8") as lf:
+                        lf.write(header)
+                except Exception:
+                    pass
+                # Clear terminal and print a helpful line that remains visible
+                try:
                     os.system("clear")
                 except Exception:
                     pass
@@ -466,8 +507,10 @@ class TusshApp(App):
                     print(f"Connecting to {alias} …")
                 except Exception:
                     pass
+                # Run the command with stderr appended to the log file
                 try:
-                    rc = subprocess.call(args)
+                    with open(self._log_path, "ab", buffering=0) as lfbin:
+                        rc = subprocess.call(args, stderr=lfbin)
                 except FileNotFoundError:
                     print(f"Error: '{args[0]}' not found on PATH.")
                     rc = 127
@@ -481,6 +524,12 @@ class TusshApp(App):
             self._set_status(f"Disconnected from {alias}")
         else:
             self._set_status(f"[error] Connection exited with code {rc}")
+            # Record error with copyable command
+            try:
+                cmd = shlex.join(args)
+            except Exception:
+                cmd = " ".join(args)
+            self._record_connect_error(alias, cmd, rc)
 
     def action_add(self) -> None:
         if getattr(self._settings, "read_only", False):
@@ -724,6 +773,25 @@ class TusshApp(App):
 
     def action_options(self) -> None:
         self.push_screen(OptionsModal(self._settings), self._on_options_saved)
+
+    def action_logs(self) -> None:
+        self.push_screen(LogModal(getattr(self, "_log_path", "/tmp/tussh_errors.log")))
+
+    def _record_connect_error(self, alias: str, cmd: str, code: int) -> None:
+        from datetime import datetime
+        entry = {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "alias": alias,
+            "cmd": cmd,
+            "code": int(code),
+        }
+        errs = self._settings.connect_errors or []
+        errs.append(entry)
+        # Cap log size
+        if len(errs) > 50:
+            errs = errs[-50:]
+        self._settings.connect_errors = errs
+        self._settings.save()
 
     def _on_options_saved(self, settings: Optional[UserSettings]) -> None:
         if settings is None:
