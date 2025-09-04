@@ -5,6 +5,7 @@ import shlex
 import subprocess
 from pathlib import Path
 from typing import Dict, Optional
+import hashlib
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -50,6 +51,8 @@ class TusshApp(App):
         Binding("d", "delete", "Delete"),
         Binding("r", "raw_edit", "Raw Edit"),
         Binding("o", "options", "Options"),
+        Binding("p", "toggle_pin", "Pin"),
+        Binding("f", "toggle_favorite", "Fav"),
         Binding("escape", "quit", "Quit"),
         Binding("q", "quit", show=False),
         Binding("/", "focus_filter", "Filter"),
@@ -133,12 +136,14 @@ class TusshApp(App):
         lst.clear()
 
         all_hosts = hosts_list(self._idx)
-        all_hosts.sort(key=lambda a: (-self._settings.usage.get(a, 0), a.casefold()))
+        # Sort: pinned first, then usage desc, then alias
+        pin_set = set(self._settings.pinned or [])
+        all_hosts.sort(key=lambda a: (-1 if a in pin_set else 0, -self._settings.usage.get(a, 0), a.casefold()))
         for host in all_hosts:
-            lst.append(HostItem(host))
-        if lst.children:
+            lst.append(HostItem(host, display=self._display_for_host(host)))
+        if all_hosts:
             lst.index = 0
-            self.selected_alias = self._alias_from_item(lst.children[0])
+            self.selected_alias = all_hosts[0]
         self.update_details()
 
     # ---- Helpers
@@ -151,6 +156,45 @@ class TusshApp(App):
 
     def _set_status(self, msg: str) -> None:
         self.query_one("#status", Static).update(msg)
+
+    # ---- Tag rendering helpers
+
+    def _tag_bg(self, tag: str) -> str:
+        """Deterministic background color name for a tag."""
+        palette = [
+            "red",
+            "green",
+            "blue",
+            "magenta",
+            "cyan",
+            "yellow",
+            "orange1",
+            "deep_sky_blue1",
+            "violet",
+            "turquoise2",
+        ]
+        h = hashlib.sha1(tag.encode("utf-8")).digest()[0]
+        return palette[h % len(palette)]
+
+    def _tag_chip(self, tag: str) -> str:
+        bg = self._tag_bg(tag.lower())
+        # Prefer dark text for readability; only use white on very dark backgrounds
+        very_dark = {"red", "blue", "magenta", "violet"}
+        fg = "white" if bg in very_dark else "black"
+        return f"[{fg} on {bg}]#{tag}[/]"
+
+    def _display_for_host(self, host: str) -> str:
+        pin_set = set(self._settings.pinned or [])
+        fav_set = set(self._settings.favorites or [])
+        prefix = ""
+        if host in pin_set:
+            prefix += "📌 "
+        if host in fav_set:
+            prefix += "★ "
+        chips = " ".join(self._tag_chip(t) for t in (self._settings.host_tags.get(host, [])))
+        if chips:
+            return f"{prefix}{host} {chips}"
+        return f"{prefix}{host}"
 
     def _update_cmd_preview(self) -> None:
         alias = self._current_alias()
@@ -183,6 +227,10 @@ class TusshApp(App):
         if not alias or not self._idx:
             self._update_cmd_preview()
             return
+        # Show tags (if any) at the top
+        tags = self._settings.host_tags.get(alias, [])
+        if tags:
+            table.add_row("Tags", ", ".join(tags))
         eff = effective_config(self._idx, alias)
         # Show common fields first, then everything else
         shown = set()
@@ -223,13 +271,27 @@ class TusshApp(App):
         lst.clear()
         if not self._idx:
             return
-        filtered = [h for h in hosts_list(self._idx) if token in h.lower()]
-        filtered.sort(key=lambda a: (-self._settings.usage.get(a, 0), a.casefold()))
+        def match(h: str) -> bool:
+            if not token:
+                return True
+            if token.startswith("#") and len(token) > 1:
+                tag = token[1:]
+                tags = [t.lower() for t in self._settings.host_tags.get(h, [])]
+                return tag in tags
+            if token.startswith("tag:") and len(token) > 4:
+                tag = token[4:]
+                tags = [t.lower() for t in self._settings.host_tags.get(h, [])]
+                return tag in tags
+            return token in h.lower()
+
+        filtered = [h for h in hosts_list(self._idx) if match(h)]
+        pin_set = set(self._settings.pinned or [])
+        filtered.sort(key=lambda a: (-1 if a in pin_set else 0, -self._settings.usage.get(a, 0), a.casefold()))
         for host in filtered:
-            lst.append(HostItem(host))
-        if lst.children:
+            lst.append(HostItem(host, display=self._display_for_host(host)))
+        if filtered:
             lst.index = 0
-            self.selected_alias = self._alias_from_item(lst.children[0])
+            self.selected_alias = filtered[0]
         else:
             self.selected_alias = None
         self.update_details()
@@ -303,7 +365,15 @@ class TusshApp(App):
         av = hosts_list(self._idx) if self._idx else []
         self.push_screen(
             AddEditHostModal(
-                title="Add host", alias=None, options=None, extras_text="", overrides=None, available_hosts=av
+                title="Add host",
+                alias=None,
+                options=None,
+                extras_text="",
+                overrides=None,
+                available_hosts=av,
+                favorite=False,
+                pinned=False,
+                tags=[],
             ),
             self._on_add_edit_result,
         )
@@ -318,9 +388,13 @@ class TusshApp(App):
         # Split fields into common vs extras
         opts: Dict[str, str] = {}
         extras_lines: list[str] = []
+        # Build case-insensitive map to canonical field names
+        canon_map: Dict[str, str] = {c.lower(): c for c in COMMON_FIELDS_ORDER}
+        canon_map["proxycommand"] = "ProxyCommand"
         for k, v in eff.items():
-            if k in COMMON_FIELDS_ORDER or k in {"ProxyCommand"}:
-                opts[k] = v
+            ck = canon_map.get(k.lower())
+            if ck is not None:
+                opts[ck] = v
             else:
                 extras_lines.append(f"{k} {v}")
         self.push_screen(
@@ -331,6 +405,9 @@ class TusshApp(App):
                 extras_text="\n".join(extras_lines),
                 overrides=self._settings.host_overrides.get(alias, {}),
                 available_hosts=hosts_list(self._idx),
+                favorite=alias in (self._settings.favorites or []),
+                pinned=alias in (self._settings.pinned or []),
+                tags=self._settings.host_tags.get(alias, []),
             ),
             self._on_add_edit_result,
         )
@@ -363,7 +440,14 @@ class TusshApp(App):
     def _on_add_edit_result(self, result: Optional[tuple]) -> None:
         if not result or not self._idx:
             return
-        if len(result) == 4:
+        alias: str
+        opts: Dict[str, str]
+        extras: str
+        ov: Dict[str, str]
+        meta: Dict[str, object] = {}
+        if len(result) == 5:
+            alias, opts, extras, ov, meta = result  # type: ignore[misc]
+        elif len(result) == 4:
             alias, opts, extras, ov = result  # type: ignore[misc]
         else:
             alias, opts, extras = result  # type: ignore[misc]
@@ -375,11 +459,89 @@ class TusshApp(App):
                 self._settings.host_overrides[alias] = ov
             else:
                 self._settings.host_overrides.pop(alias, None)
+            # Apply metadata (favorite, pinned, tags)
+            fav_set = set(self._settings.favorites or [])
+            pin_set = set(self._settings.pinned or [])
+            if meta:
+                if isinstance(meta.get("favorite"), bool):
+                    if meta["favorite"]:
+                        fav_set.add(alias)
+                    else:
+                        fav_set.discard(alias)
+                if isinstance(meta.get("pinned"), bool):
+                    if meta["pinned"]:
+                        pin_set.add(alias)
+                    else:
+                        pin_set.discard(alias)
+                if isinstance(meta.get("tags"), list):
+                    tags_list = [str(t).strip() for t in meta["tags"] if str(t).strip()]
+                    if tags_list:
+                        self._settings.host_tags[alias] = tags_list
+                    else:
+                        self._settings.host_tags.pop(alias, None)
+            self._settings.favorites = sorted(fav_set)
+            self._settings.pinned = sorted(pin_set)
             self._settings.save()
+            current = alias
             self.reload_index(self._idx.primary)
+            # Restore selection to the edited/added host if present
+            lst = self.query_one("#list", ListView)
+            for i, child in enumerate(lst.children):
+                if getattr(child, "alias", None) == current:
+                    lst.index = i
+                    self.selected_alias = current
+                    break
         except RuntimeError as e:
             self._set_status(f"[error] {e}")
             self.bell()
+
+    def action_toggle_pin(self) -> None:
+        alias = self._current_alias()
+        if not alias:
+            self.bell()
+            return
+        pins = set(self._settings.pinned or [])
+        if alias in pins:
+            pins.discard(alias)
+            self._set_status(f"Unpinned {alias}")
+        else:
+            pins.add(alias)
+            self._set_status(f"Pinned {alias}")
+        self._settings.pinned = sorted(pins)
+        self._settings.save()
+        # Reload list preserving selection
+        sel = alias
+        self.reload_index(self._idx.primary)  # type: ignore[union-attr]
+        lst = self.query_one("#list", ListView)
+        for i, child in enumerate(lst.children):
+            if getattr(child, "alias", None) == sel:
+                lst.index = i
+                self.selected_alias = sel
+                break
+
+    def action_toggle_favorite(self) -> None:
+        alias = self._current_alias()
+        if not alias:
+            self.bell()
+            return
+        favs = set(self._settings.favorites or [])
+        if alias in favs:
+            favs.discard(alias)
+            self._set_status(f"Removed favorite: {alias}")
+        else:
+            favs.add(alias)
+            self._set_status(f"Favorited {alias}")
+        self._settings.favorites = sorted(favs)
+        self._settings.save()
+        # Reload list preserving selection
+        sel = alias
+        self.reload_index(self._idx.primary)  # type: ignore[union-attr]
+        lst = self.query_one("#list", ListView)
+        for i, child in enumerate(lst.children):
+            if getattr(child, "alias", None) == sel:
+                lst.index = i
+                self.selected_alias = sel
+                break
 
     def action_delete(self) -> None:
         alias = self._current_alias()

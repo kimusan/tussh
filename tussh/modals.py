@@ -118,7 +118,9 @@ class OptionsModal(ModalScreen[UserSettings]):
 
 
 class AddEditHostModal(
-    ModalScreen[tuple[str, Dict[str, str], str, Dict[str, str]] | None]
+    ModalScreen[tuple[str, Dict[str, str], str, Dict[str, str]]
+                | tuple[str, Dict[str, str], str, Dict[str, str], Dict[str, object]]
+                | None]
 ):
     """Collects fields for Add or Edit. Returns (alias, options, extras_text)."""
 
@@ -134,6 +136,9 @@ class AddEditHostModal(
         raw_mode: bool = False,
         overrides: Dict[str, str] | None = None,
         available_hosts: Optional[List[str]] = None,
+        favorite: bool = False,
+        pinned: bool = False,
+        tags: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
         self._title = title
@@ -143,6 +148,9 @@ class AddEditHostModal(
         self._raw = raw_mode
         self._ov = overrides or {}
         self._available_hosts = available_hosts or []
+        self._favorite = bool(favorite)
+        self._pinned = bool(pinned)
+        self._tags = list(tags or [])
 
     def compose(self) -> ComposeResult:
         def row(label: str, widget) -> Horizontal:
@@ -185,6 +193,19 @@ class AddEditHostModal(
                         placeholder="e.g. -o ConnectTimeout=3",
                         id="ov_extra",
                     ),
+                ),
+                Label("Bookmarks & Tags", classes="form-section"),
+                row(
+                    "Favorite",
+                    Select((("Yes", "yes"), ("No", "no")), id="fav_toggle", value=("yes" if self._favorite else "no")),
+                ),
+                row(
+                    "Pinned",
+                    Select((("Yes", "yes"), ("No", "no")), id="pin_toggle", value=("yes" if self._pinned else "no")),
+                ),
+                row(
+                    "Tags (comma-separated)",
+                    Input(", ".join(self._tags), placeholder="prod, db", id="tags_input"),
                 ),
                 id="host-form-rows",
                 classes="modal-body",
@@ -305,6 +326,27 @@ class AddEditHostModal(
                         placeholder="e.g. -o ConnectTimeout=3",
                         id="ov_extra",
                     ),
+                )
+            )
+
+            # Favorites / Pinned / Tags
+            rows.append(Label("Bookmarks & Tags", classes="form-section"))
+            rows.append(
+                row(
+                    "Favorite",
+                    Select((("Yes", "yes"), ("No", "no")), id="fav_toggle", value=("yes" if self._favorite else "no")),
+                )
+            )
+            rows.append(
+                row(
+                    "Pinned",
+                    Select((("Yes", "yes"), ("No", "no")), id="pin_toggle", value=("yes" if self._pinned else "no")),
+                )
+            )
+            rows.append(
+                row(
+                    "Tags (comma-separated)",
+                    Input(", ".join(self._tags), placeholder="prod, db", id="tags_input"),
                 )
             )
 
@@ -512,7 +554,22 @@ class AddEditHostModal(
         if extra_v:
             ov["extra_args"] = extra_v
 
-        self.dismiss((alias, opts, extras, ov))
+        # Collect UI metadata
+        def _is_yes(v: str) -> bool:
+            return v.strip().lower() in {"yes", "y", "true", "1"}
+
+        fav_v = (self.query_one("#fav_toggle", Select).value or "no") if self.query("#fav_toggle") else "no"
+        pin_v = (self.query_one("#pin_toggle", Select).value or "no") if self.query("#pin_toggle") else "no"
+        tags_v = self.query_one("#tags_input", Input).value if self.query("#tags_input") else ""
+        tags_list = [t.strip() for t in tags_v.split(",") if t.strip()]
+
+        meta: Dict[str, object] = {
+            "favorite": _is_yes(fav_v),
+            "pinned": _is_yes(pin_v),
+            "tags": tags_list,
+        }
+
+        self.dismiss((alias, opts, extras, ov, meta))
 
     def action_cancel(self) -> None:
         self.dismiss(None)

@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 import json as _json
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from platformdirs import user_config_dir
 
@@ -23,6 +23,9 @@ class UserSettings:
     theme: Optional[str] = None
     usage: Dict[str, int] = field(default_factory=dict)
     host_overrides: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    favorites: List[str] = field(default_factory=list)
+    pinned: List[str] = field(default_factory=list)
+    host_tags: Dict[str, List[str]] = field(default_factory=dict)
 
     @classmethod
     def load(cls) -> "UserSettings":
@@ -59,6 +62,32 @@ class UserSettings:
         if not isinstance(theme_v, str) or not theme_v.strip():
             theme_v = None
 
+        # Clean favorites / pinned lists
+        def _clean_list(obj) -> List[str]:
+            if not isinstance(obj, list):
+                return []
+            out: List[str] = []
+            for v in obj:
+                try:
+                    s = str(v).strip()
+                    if s:
+                        out.append(s)
+                except Exception:
+                    continue
+            return out
+
+        favorites_v = _clean_list(data.get("favorites", []))
+        pinned_v = _clean_list(data.get("pinned", []))
+
+        # Clean host_tags mapping -> list[str]
+        host_tags_v_raw = data.get("host_tags") or {}
+        ht_clean: Dict[str, List[str]] = {}
+        if isinstance(host_tags_v_raw, dict):
+            for k, v in host_tags_v_raw.items():
+                key = str(k)
+                vals = _clean_list(v)
+                ht_clean[key] = vals
+
         return cls(
             extra_args=data.get("extra_args", ""),
             ssh_config_path=data.get("ssh_config_path"),
@@ -66,6 +95,9 @@ class UserSettings:
             theme=theme_v,
             usage=usage_int,
             host_overrides=ho_clean,
+            favorites=favorites_v,
+            pinned=pinned_v,
+            host_tags=ht_clean,
         )
 
     def save(self) -> None:
