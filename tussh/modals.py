@@ -188,6 +188,33 @@ class AddEditHostModal(
             # Raw mode: only a big text area editor
             editor = TextArea(self._extras, id="extras", language=None)
             form_body = Vertical(
+                # Profile (only when adding)
+                (
+                    row(
+                        "Profile",
+                        Select(
+                            (
+                                ("None", ""),
+                                ("Fast connect", "fast"),
+                                ("Hardened", "hardened"),
+                                ("Low bandwidth", "low_bw"),
+                                ("Stable NAT / Idle", "keepalive"),
+                                ("Multiplexed persistent", "multiplex"),
+                                ("Bastion (ProxyJump)", "bastion"),
+                                ("Dev tunnels (LocalForward)", "dev_tunnel"),
+                                ("Reverse tunnels (RemoteForward)", "reverse_tunnel"),
+                                ("Kerberos / GSSAPI", "kerberos"),
+                                ("IPv4 only", "ipv4"),
+                                ("X11 forwarding", "x11"),
+                                ("Mosh client", "mosh"),
+                            ),
+                            id="profile_select",
+                            value="",
+                        ),
+                    )
+                    if not self._alias
+                    else Static("")
+                ),
                 editor,
                 Label("Per-host overrides (optional)", classes="form-section"),
                 row(
@@ -239,6 +266,31 @@ class AddEditHostModal(
             rows: list[Horizontal | Static] = []
             if not self._alias:
                 rows.append(field_row("Alias (Host)", "Alias", "e.g. prod-db-1"))
+                # Profile selector for new hosts
+                rows.append(
+                    row(
+                        "Profile",
+                        Select(
+                            (
+                                ("None", ""),
+                                ("Fast connect", "fast"),
+                                ("Hardened", "hardened"),
+                                ("Low bandwidth", "low_bw"),
+                                ("Stable NAT / Idle", "keepalive"),
+                                ("Multiplexed persistent", "multiplex"),
+                                ("Bastion (ProxyJump)", "bastion"),
+                                ("Dev tunnels (LocalForward)", "dev_tunnel"),
+                                ("Reverse tunnels (RemoteForward)", "reverse_tunnel"),
+                                ("Kerberos / GSSAPI", "kerberos"),
+                                ("IPv4 only", "ipv4"),
+                                ("X11 forwarding", "x11"),
+                                ("Mosh client", "mosh"),
+                            ),
+                            id="profile_select",
+                            value="",
+                        ),
+                    )
+                )
             else:
                 rows.append(
                     Horizontal(
@@ -399,6 +451,164 @@ class AddEditHostModal(
     def on_input_changed(self, _: Input.Changed) -> None:
         if not self._raw:
             self._update_save_enabled()
+
+    # --- Profiles -----------------------------------------------------------
+    def _apply_profile(self, key: str) -> None:
+        # Define simple presets; keys use canonical capitalization
+        extras_lines: list[str] = []
+        patch: Dict[str, str] = {}
+        if key == "fast":
+            patch = {
+                "ServerAliveInterval": "20",
+                "ServerAliveCountMax": "2",
+                "Compression": "yes",
+            }
+            extras_lines = [
+                "ControlMaster auto",
+                "ControlPersist 60",
+                "ControlPath ~/.ssh/cm/%r@%h:%p",
+            ]
+            # Ensure ControlMaster dir exists
+            try:
+                os.makedirs(os.path.expanduser("~/.ssh/cm"), exist_ok=True)
+            except Exception:
+                pass
+        elif key == "hardened":
+            patch = {
+                "StrictHostKeyChecking": "yes",
+                "PreferredAuthentications": "publickey",
+                "Compression": "no",
+                "ServerAliveInterval": "30",
+                "ServerAliveCountMax": "3",
+            }
+            extras_lines = [
+                "PasswordAuthentication no",
+                "KbdInteractiveAuthentication no",
+                "IdentitiesOnly yes",
+            ]
+        elif key == "low_bw":
+            patch = {
+                "Compression": "yes",
+                "ServerAliveInterval": "30",
+                "ServerAliveCountMax": "3",
+                "PreferredAuthentications": "publickey",
+            }
+            extras_lines = [
+                "# Advanced (uncomment if needed):",
+                "# Ciphers chacha20-poly1305@openssh.com",
+                "# MACs hmac-sha2-256,hmac-sha2-512",
+            ]
+        elif key == "keepalive":
+            patch = {
+                "ServerAliveInterval": "15",
+                "ServerAliveCountMax": "6",
+                "Compression": "no",
+            }
+            extras_lines = [
+                "TCPKeepAlive yes",
+            ]
+        elif key == "multiplex":
+            patch = {
+                "ConnectTimeout": "5",
+            }
+            extras_lines = [
+                "ControlMaster auto",
+                "ControlPersist 300",
+                "ControlPath ~/.ssh/cm/%r@%h:%p",
+                "# Optional keepalive:",
+                "# ServerAliveInterval 20",
+                "# ServerAliveCountMax 3",
+            ]
+            try:
+                os.makedirs(os.path.expanduser("~/.ssh/cm"), exist_ok=True)
+            except Exception:
+                pass
+        elif key == "bastion":
+            patch = {
+                "ProxyJump": "bastion",
+                "StrictHostKeyChecking": "yes",
+            }
+        elif key == "dev_tunnel":
+            patch = {
+                "LocalForward": "127.0.0.1:5432 127.0.0.1:5432",
+                "ServerAliveInterval": "20",
+                "ServerAliveCountMax": "3",
+            }
+            extras_lines = [
+                "# Exit if forward can't be set up:",
+                "# ExitOnForwardFailure yes",
+            ]
+        elif key == "reverse_tunnel":
+            patch = {
+                "RemoteForward": "0.0.0.0:8080 127.0.0.1:8080",
+                "ServerAliveInterval": "20",
+                "ServerAliveCountMax": "3",
+            }
+            extras_lines = [
+                "GatewayPorts yes",
+            ]
+        elif key == "kerberos":
+            patch = {
+                "PreferredAuthentications": "gssapi-with-mic,publickey",
+                "StrictHostKeyChecking": "yes",
+            }
+            extras_lines = [
+                "GSSAPIAuthentication yes",
+                "GSSAPIDelegateCredentials no",
+            ]
+        elif key == "ipv4":
+            patch = {
+                "ConnectTimeout": "5",
+            }
+            extras_lines = [
+                "AddressFamily inet",
+            ]
+        elif key == "x11":
+            patch = {
+                "ForwardX11": "yes",
+                "Compression": "yes",
+            }
+            extras_lines = [
+                "ForwardX11Trusted yes",
+            ]
+        elif key == "mosh":
+            try:
+                sel = self.query_one("#ov_client", Select)
+                sel.value = "mosh"
+            except Exception:
+                pass
+            return
+        else:
+            return
+
+        # Apply to structured fields where present
+        for k, v in patch.items():
+            wid = f"#f_{k}"
+            try:
+                w = self.query_one(wid, Input)
+                w.value = v
+            except Exception:
+                # Unknown/missing field goes to extras
+                extras_lines.append(f"{k} {v}")
+
+        # Merge extras
+        try:
+            ed = self.query_one("#extras", TextArea)
+            cur = ed.text.strip()
+            prof = "\n".join(extras_lines).strip()
+            if prof:
+                if cur:
+                    ed.text = cur + "\n" + prof + "\n"
+                else:
+                    ed.text = prof + "\n"
+        except Exception:
+            pass
+
+    def on_select_changed(self, event: Select.Changed) -> None:  # type: ignore[override]
+        if event.select.id == "profile_select" and not self._alias:
+            key = (event.value or "").strip()
+            if key:
+                self._apply_profile(str(key))
 
     def _collect_structured(self) -> tuple[str, Dict[str, str]]:
         opts: Dict[str, str] = {}

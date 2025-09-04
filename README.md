@@ -14,11 +14,16 @@ A fast, responsive Textual TUI for browsing and launching SSH hosts from your Op
   runs in your terminal, and resumes the UI after you disconnect
 - Theme persistence: pick a theme via Ctrl-P palette; TuSSH saves and restores it
 - Add/Edit/Delete host blocks (writes only to primary config)
-- per-host notes that can be markdown formatted
+- Notes per host: Markdown formatted notes in the details pane
 - Options modal for global extra ssh args and a custom config path
 - Choose client: SSH or Mosh (extra SSH args passed to mosh via `--ssh`)
 - Filter quickly with `/` (type to filter, `Esc` to leave the filter)
 - Usage-based sorting: hosts bubble up as you use them more
+- Tags, pin, favorites; tag chips toggle with `t`
+- Read-only mode to prevent edits
+- Profiles for new hosts (see PROFILES.md)
+- Logs view (stderr tail) with copyable commands; press `l`
+- Slide-in help panel with `?`
 
 ## Install
 
@@ -72,6 +77,7 @@ pipx upgrade tussh
 
 - Add/Edit host modal:
   - Two-column form: label on the left, input on the right; scrollable content
+  - Profiles: when adding a host, prefill with presets (Fast connect, Hardened, etc.). See PROFILES.md
   - Common fields: Alias, HostName, User, Port, IdentityFile, ProxyJump, ProxyCommand, forwards, keepalives, known hosts file, auth preferences, etc.
   - Booleans: Use OpenSSH-friendly values (yes/no). Examples are shown as placeholders.
   - “Additional options”: free-form lines that will be written verbatim inside the host block
@@ -102,6 +108,8 @@ Settings include `extra_args`, `ssh_config_path`, `client`, `usage` counts, and
   When you disconnect, TuSSH resumes instantly without restarting.
   If `suspend` isn’t available in your Textual version, TuSSH falls back to
   the previous behavior and `exec`s the client.
+  Stderr is appended to `~/.config/tussh/ssh_errors.log` with a header per
+  connection; open Logs (`l`) to view/tail and copy the last command.
 
 ## Troubleshooting
 
@@ -115,6 +123,14 @@ Settings include `extra_args`, `ssh_config_path`, `client`, `usage` counts, and
     saved to `settings.json` under `theme` and restored at startup
 - Can’t edit/delete a host:
   - The host may live in an included file or a multi-alias block; the app will tell you what to change
+ - Logs are empty:
+   - Only stderr is captured; successful connections typically don’t log. Ensure the log file is writable.
+
+## Profiles
+
+See PROFILES.md for full details on built-in profiles (Fast connect, Hardened,
+Low bandwidth, Stable NAT/Idle, Multiplexed persistent, Bastion, Dev/Reverse
+Tunnels, Kerberos/GSSAPI, IPv4 only, X11 forwarding, Mosh client).
 
 ## Notes
 
