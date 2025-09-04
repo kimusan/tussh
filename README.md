@@ -14,6 +14,7 @@ A fast, responsive Textual TUI for browsing and launching SSH hosts from your Op
   runs in your terminal, and resumes the UI after you disconnect
 - Theme persistence: pick a theme via Ctrl-P palette; TuSSH saves and restores it
 - Add/Edit/Delete host blocks (writes only to primary config)
+- per-host notes that can be markdown formatted
 - Options modal for global extra ssh args and a custom config path
 - Choose client: SSH or Mosh (extra SSH args passed to mosh via `--ssh`)
 - Filter quickly with `/` (type to filter, `Esc` to leave the filter)
@@ -25,9 +26,15 @@ A fast, responsive Textual TUI for browsing and launching SSH hosts from your Op
 poetry install
 poetry run tussh
 
-# or, after publishing
-pip install tussh
+# or even easier via pipx (or pip):
+pipx install tussh
 tussh
+```
+
+# upgrade
+
+``` bash
+pipx upgrade tussh
 ```
 
 ## Usage
@@ -40,6 +47,7 @@ tussh
 - `e`: Edit selected host
 - `d`: Delete selected host (with confirmation)
 - `o`: Open Options
+- `?`: Show the help panel
 - `Esc` or `q`: Quit (also closes an open modal)
 - Ctrl-P: Open the palette (pick themes; your choice is saved)
 
