@@ -53,6 +53,7 @@ class TusshApp(App):
         Binding("o", "options", "Options"),
         Binding("p", "toggle_pin", "Pin"),
         Binding("f", "toggle_favorite", "Fav"),
+        Binding("?", "toggle_help", "Help"),
         Binding("escape", "quit", "Quit"),
         Binding("q", "quit", show=False),
         Binding("/", "focus_filter", "Filter"),
@@ -102,6 +103,13 @@ class TusshApp(App):
                 yield Static("", id="cmdline")
                 yield Static("", id="status")
         yield Footer()
+        # Help dock overlay (hidden by default; toggled with '?')
+        help_body = Static(self._help_text(), id="help-text")
+        yield Vertical(
+            help_body,
+            Button("Close (press ?)", id="help-close"),
+            id="help",
+        )
 
     def on_mount(self) -> None:
         # Subscribe to theme changes from Ctrl-P palette and persist them
@@ -127,6 +135,16 @@ class TusshApp(App):
         # Make options table non-focusable / non-selectable
         table = self.query_one("#table", DataTable)
         table.can_focus = False
+        # Ensure help is hidden initially
+        self._set_help_visible(False)
+        # Set help panel border title
+        try:
+            hp = self.query_one("#help")
+            if hasattr(hp, "border_title"):
+                setattr(hp, "border_title", "Help")
+            hp.styles.border_title = "Help"
+        except Exception:
+            pass
 
     # ---- Data loading
 
@@ -195,6 +213,48 @@ class TusshApp(App):
         if chips:
             return f"{prefix}{host} {chips}"
         return f"{prefix}{host}"
+
+    # ---- Help dock ----
+
+    def _help_text(self) -> str:
+        return (
+            "[b]Tussh — Help[/b]\n\n"
+            "[b]Navigation[/b]\n"
+            "- Arrow keys / j,k: Move selection\n"
+            "- / : Focus filter; type to filter (Esc to exit)\n"
+            "- Enter: Connect to selected host\n\n"
+            "[b]Actions[/b]\n"
+            "- a: Add host\n- e: Edit host\n- d: Delete host\n- r: Raw edit\n- o: Options\n- p: Toggle pin\n- f: Toggle favorite\n- ?: Toggle help\n- Esc/q: Quit\n\n"
+            "[b]Tags & Filtering[/b]\n"
+            "- Add tags in Add/Edit (comma-separated)\n"
+            "- Filter by tag using '#tag' or 'tag:tag'\n"
+            "- Pinned hosts sort first; favorites show with a star\n\n"
+            "[b]Themes[/b]\n"
+            "- Press Ctrl-P and pick a theme; tussh saves and restores it\n\n"
+            "[b]Connecting[/b]\n"
+            "- TUI suspends while SSH/Mosh runs; resumes after disconnect\n"
+            "- Command preview shows the effective argv\n"
+        )
+
+    def _set_help_visible(self, visible: bool) -> None:
+        help_panel = self.query_one("#help")
+        if visible:
+            help_panel.add_class("show")
+        else:
+            help_panel.remove_class("show")
+
+    def action_toggle_help(self) -> None:
+        help_panel = self.query_one("#help")
+        if "show" in help_panel.classes:
+            self._set_help_visible(False)
+        else:
+            # Refresh content (in case bindings/features changed)
+            self.query_one("#help-text", Static).update(self._help_text())
+            self._set_help_visible(True)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "help-close":
+            self._set_help_visible(False)
 
     def _update_cmd_preview(self) -> None:
         alias = self._current_alias()

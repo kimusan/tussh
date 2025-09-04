@@ -61,3 +61,21 @@ Horizontal { height:auto;}
 #jb_panel { width: 1fr; height:auto; }
 #jb_panel TextArea { height: 2; }
 .form-section { margin: 1 0; }
+
+/* Help dock overlay */
+#help {
+  layer: overlay;
+  dock: right;
+  width: 60%;
+  max-width: 100;
+  height: 100%;
+  border: round dodgerblue;
+  padding: 1 2;
+  background: $panel;
+  /* Start fully off-screen to the right */
+  offset-x: 100%;
+  transition: offset 200ms in_out_cubic;
+}
+#help.show { offset-x: 0; }
+#help #help-title { text-style: bold; }
+#help Button { height: 3; margin-top: 1; }
