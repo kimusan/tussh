@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- ff79fd0 2025-09-04 docs(release): added changelog and release scripts
+- 0ee2549 2025-09-04 refactor(add/edit): multiline "additional optins" textfield
+
 ## v0.4.0
 
 - df94301 2025-09-04 chore: bump to v0.4.0
