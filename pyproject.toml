@@ -14,6 +14,7 @@ include = [
 python = ">=3.10, <4.0.0"
 textual = ">=0.58.0"
 platformdirs = ">=4.0.0"
+rich = ">=13.0.0"
 
 [tool.poetry.scripts]
 tussh = "tussh.cli:main"

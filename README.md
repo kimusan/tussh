@@ -1,4 +1,11 @@
-# TuSSH
+
+<p align="center">
+  <img src="assets/tussh-logo.png" alt="TuSSH Logo" width="400"/>
+</p>
+
+<p align="center">
+  <strong>A powerful, feature-rich, and beautiful SSH TUI client.</strong>
+  <br />
 
 A fast, responsive Textual TUI for browsing and launching SSH hosts from your OpenSSH config.
 
@@ -123,8 +130,8 @@ Settings include `extra_args`, `ssh_config_path`, `client`, `usage` counts, and
     saved to `settings.json` under `theme` and restored at startup
 - Can’t edit/delete a host:
   - The host may live in an included file or a multi-alias block; the app will tell you what to change
- - Logs are empty:
-   - Only stderr is captured; successful connections typically don’t log. Ensure the log file is writable.
+- Logs are empty:
+  - Only stderr is captured; successful connections typically don’t log. Ensure the log file is writable.
 
 ## Profiles
 
