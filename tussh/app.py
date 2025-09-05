@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import difflib
+import math
 from pathlib import Path
 from typing import Dict, Optional
 import hashlib
@@ -57,6 +59,7 @@ class TusshApp(App):
         Binding("p", "toggle_pin", "Pin"),
         Binding("f", "toggle_favorite", "Fav"),
         Binding("t", "toggle_tags", "Tags"),
+        Binding("x", "toggle_exact", "Search mode"),
         Binding("?", "toggle_help", "Help"),
         Binding("escape", "quit", "Quit"),
         Binding("q", "quit", show=False),
@@ -172,6 +175,15 @@ class TusshApp(App):
             pass
         # Apply read-only mode UI/keys
         self._apply_read_only_state()
+        # Apply correct label for exact/fuzzy toggle in footer
+        self._update_exact_binding_label()
+        # Update filter placeholder to reflect search mode
+        try:
+            mode = "(Exact mode)" if self._settings.exact_match_only else "(Fuzzy mode)"
+            inp = self.query_one("#filter", Input)
+            inp.placeholder = f"Filter hosts {mode}..."
+        except Exception:
+            pass
         # Set notes panel border title
         try:
             md = self.query_one("#notes", Markdown)
@@ -191,7 +203,13 @@ class TusshApp(App):
         all_hosts = hosts_list(self._idx)
         # Sort: pinned first, then usage desc, then alias
         pin_set = set(self._settings.pinned or [])
-        all_hosts.sort(key=lambda a: (-1 if a in pin_set else 0, -self._settings.usage.get(a, 0), a.casefold()))
+        all_hosts.sort(
+            key=lambda a: (
+                -1 if a in pin_set else 0,
+                -self._settings.usage.get(a, 0),
+                a.casefold(),
+            )
+        )
         for host in all_hosts:
             markers, chips = self._markers_and_chips(host)
             lst.append(HostItem(host, markers=markers, chips=chips))
@@ -235,6 +253,30 @@ class TusshApp(App):
         except Exception:
             pass
 
+    def _update_exact_binding_label(self) -> None:
+        """Update the footer label for the exact/fuzzy toggle binding."""
+        try:
+            binds = getattr(self, "bindings", None)
+            if binds is not None:
+                for b in getattr(binds, "_bindings", []):
+                    if getattr(b, "action", "") == "toggle_exact":
+                        b.description = (
+                            "Fuzzy" if self._settings.exact_match_only else "Exact"
+                        )
+                        break
+            self.refresh()
+        except Exception:
+            pass
+
+    def _update_search_placeholder(self) -> None:
+        """Reflect current search mode in the filter input placeholder."""
+        try:
+            mode = "(Exact mode)" if self._settings.exact_match_only else "(Fuzzy mode)"
+            inp = self.query_one("#filter", Input)
+            inp.placeholder = f"Filter hosts {mode}..."
+        except Exception:
+            pass
+
     # ---- Tag rendering helpers
 
     def _tag_bg(self, tag: str) -> str:
@@ -267,7 +309,9 @@ class TusshApp(App):
         markers = ("📌" if host in pin_set else "") + ("★" if host in fav_set else "")
         chips = ""
         if self._settings.show_tags_in_list:
-            chips = " ".join(self._tag_chip(t) for t in (self._settings.host_tags.get(host, [])))
+            chips = " ".join(
+                self._tag_chip(t) for t in (self._settings.host_tags.get(host, []))
+            )
         return markers, chips
 
     # ---- Help dock ----
@@ -280,7 +324,7 @@ class TusshApp(App):
             "- / : Focus filter; type to filter (Esc to exit)\n"
             "- Enter: Connect to selected host\n\n"
             "[b]Actions[/b]\n"
-            "- a: Add host\n- e: Edit host\n- d: Delete host\n- r: Raw edit\n- o: Options\n- p: Toggle pin\n- f: Toggle favorite\n- t: Toggle tag chips in list\n- l: Open logs (copy failed commands)\n- ?: Toggle help\n- Esc/q: Quit\n\n"
+            "- a: Add host\n- e: Edit host\n- d: Delete host\n- r: Raw edit\n- o: Options\n- p: Toggle pin\n- f: Toggle favorite\n- t: Toggle tag chips in list\n- x: Toggle exact/fuzzy search\n- l: Open logs (copy failed commands)\n- ?: Toggle help\n- Esc/q: Quit\n\n"
             "[b]Tags & Filtering[/b]\n"
             "- Add tags in Add/Edit (comma-separated)\n"
             "- Filter by tag using '#tag' or 'tag:tag'\n"
@@ -417,31 +461,149 @@ class TusshApp(App):
         lst.clear()
         if not self._idx:
             return
-        def match(h: str) -> bool:
-            if not token:
-                return True
-            if token.startswith("#") and len(token) > 1:
-                tag = token[1:]
-                tags = [t.lower() for t in self._settings.host_tags.get(h, [])]
-                return tag in tags
-            if token.startswith("tag:") and len(token) > 4:
-                tag = token[4:]
-                tags = [t.lower() for t in self._settings.host_tags.get(h, [])]
-                return tag in tags
-            return token in h.lower()
+        all_hosts = hosts_list(self._idx)
 
-        filtered = [h for h in hosts_list(self._idx) if match(h)]
-        pin_set = set(self._settings.pinned or [])
-        filtered.sort(key=lambda a: (-1 if a in pin_set else 0, -self._settings.usage.get(a, 0), a.casefold()))
-        for host in filtered:
+        # Exact-match mode: only show items that contain the substring (or matching tag for #/tag:)
+        if getattr(self._settings, "exact_match_only", False):
+
+            def exact_match(h: str) -> bool:
+                if not token:
+                    return True
+                s = h.lower()
+                if token.startswith("#") and len(token) > 1:
+                    q = token[1:]
+                    tags = [t.lower() for t in self._settings.host_tags.get(h, [])]
+                    return q in tags
+                if token.startswith("tag:") and len(token) > 4:
+                    q = token[4:]
+                    tags = [t.lower() for t in self._settings.host_tags.get(h, [])]
+                    return q in tags
+                return token in s
+
+            filtered = [h for h in all_hosts if exact_match(h)]
+            # Preserve sort: pinned first, then usage desc, then alias
+            pin_set = set(self._settings.pinned or [])
+            filtered.sort(
+                key=lambda a: (
+                    -1 if a in pin_set else 0,
+                    -self._settings.usage.get(a, 0),
+                    a.casefold(),
+                )
+            )
+            for host in filtered:
+                markers, chips = self._markers_and_chips(host)
+                lst.append(HostItem(host, markers=markers, chips=chips))
+            if filtered:
+                lst.index = 0
+                self.selected_alias = filtered[0]
+            else:
+                self.selected_alias = None
+            self.update_details()
+            return
+
+        def _alias_score(h: str, q: str) -> float:
+            if not q:
+                return 0.0
+            s = h.lower()
+            ratio = difflib.SequenceMatcher(None, q, s).ratio() * 100.0
+            score = ratio
+            if s.startswith(q):
+                score += 20
+            elif q in s:
+                score += 10
+            # simple in-order run bonus
+            si = 0
+            run = 0
+            best_run = 0
+            for ch in q:
+                pos = s.find(ch, si)
+                if pos >= 0:
+                    run += 1
+                    si = pos + 1
+                    best_run = max(best_run, run)
+                else:
+                    run = 0
+            score += best_run * 2
+            return score
+
+        def _tag_best_score(h: str, q: str) -> float:
+            tags = [t.lower() for t in self._settings.host_tags.get(h, [])]
+            if not tags or not q:
+                return 0.0
+            best = 0.0
+            for t in tags:
+                r = difflib.SequenceMatcher(None, q, t).ratio() * 100.0
+                if t.startswith(q):
+                    r += 10
+                elif q in t:
+                    r += 5
+                best = max(best, r)
+            return best
+
+        def _score(h: str) -> float:
+            # Return a combined score or a very negative number to exclude
+            if not token:
+                base = 0.0
+            else:
+                if token.startswith("#") and len(token) > 1:
+                    q = token[1:]
+                    tag_s = _tag_best_score(h, q)
+                    if tag_s < 60:
+                        return -1e9
+                    base = tag_s
+                elif token.startswith("tag:") and len(token) > 4:
+                    q = token[4:]
+                    tag_s = _tag_best_score(h, q)
+                    if tag_s < 60:
+                        return -1e9
+                    base = tag_s
+                else:
+                    q = token
+                    s = h.lower()
+                    alias_s = _alias_score(h, q)
+                    tag_s = _tag_best_score(h, q)
+                    # Require some evidence of match: exact substring or decent similarity
+                    substring = q in s
+                    if not substring and alias_s < 45 and tag_s < 50:
+                        return -1e9
+                    base = max(alias_s, tag_s * 0.3)
+
+            usage = self._settings.usage.get(h, 0)
+            usage_boost = math.log(usage + 1, 2.0) * 5.0
+            pin_boost = 20.0 if h in set(self._settings.pinned or []) else 0.0
+            fav_boost = 8.0 if h in set(self._settings.favorites or []) else 0.0
+            return base + usage_boost + pin_boost + fav_boost
+
+        scored = [(h, _score(h)) for h in all_hosts]
+        if token:
+            # Only keep hosts that passed the threshold
+            scored = [(h, s) for h, s in scored if s > -1e9]
+        scored.sort(key=lambda item: (-item[1], item[0].casefold()))
+
+        for host, _ in scored:
             markers, chips = self._markers_and_chips(host)
             lst.append(HostItem(host, markers=markers, chips=chips))
-        if filtered:
+        if scored:
             lst.index = 0
-            self.selected_alias = filtered[0]
+            self.selected_alias = scored[0][0]
         else:
             self.selected_alias = None
         self.update_details()
+
+    def action_toggle_exact(self) -> None:
+        self._settings.exact_match_only = not bool(self._settings.exact_match_only)
+        self._settings.save()
+        mode = "Exact" if self._settings.exact_match_only else "Fuzzy"
+        self._set_status(f"Search mode: {mode}")
+        self._update_exact_binding_label()
+        self._update_search_placeholder()
+        # Re-run current filter to reflect mode immediately
+        try:
+            flt = self.query_one("#filter", Input)
+            self.on_input_changed(Input.Changed(flt))  # type: ignore[arg-type]
+        except Exception:
+            # Fallback: reload list
+            self.reload_index(self._idx.primary)  # type: ignore[union-attr]
 
     # ---- Key actions
 
@@ -486,6 +648,7 @@ class TusshApp(App):
                 # Prepare stderr log and header
                 try:
                     from datetime import datetime
+
                     cmdline = shlex.join(args)
                 except Exception:
                     cmdline = " ".join(args)
@@ -779,6 +942,7 @@ class TusshApp(App):
 
     def _record_connect_error(self, alias: str, cmd: str, code: int) -> None:
         from datetime import datetime
+
         entry = {
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "alias": alias,
@@ -798,6 +962,8 @@ class TusshApp(App):
             return
         self._settings = settings
         self._apply_read_only_state()
+        self._update_exact_binding_label()
+        self._update_search_placeholder()
         # Possibly re-read index if config_path changed
         path = (
             Path(self._settings.ssh_config_path)

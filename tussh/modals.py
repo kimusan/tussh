@@ -60,6 +60,12 @@ class OptionsModal(ModalScreen[UserSettings]):
             Vertical(
                 VerticalScroll(
                     Vertical(
+                        Label("Search mode:"),
+                        Select(
+                            (("Fuzzy", "fuzzy"), ("Exact only", "exact")),
+                            value=("exact" if getattr(self._settings, "exact_match_only", False) else "fuzzy"),
+                            id="search_mode_select",
+                        ),
                         Label("Mode:"),
                         Select(
                             (("Read/Write", "rw"), ("Read-Only", "ro")),
@@ -106,10 +112,12 @@ class OptionsModal(ModalScreen[UserSettings]):
             cfgp = self.query_one("#config_path", Input).value.strip() or None
             client = self.query_one("#client_select", Select).value or "ssh"
             mode = self.query_one("#mode_select", Select).value or "rw"
+            search_mode = self.query_one("#search_mode_select", Select).value or "fuzzy"
             self._settings.extra_args = extra
             self._settings.ssh_config_path = cfgp
             self._settings.client = client
             self._settings.read_only = (mode == "ro")
+            self._settings.exact_match_only = (search_mode == "exact")
             self._settings.save()
             self.dismiss(self._settings)
         else:

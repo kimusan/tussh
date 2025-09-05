@@ -31,6 +31,8 @@ class UserSettings:
     read_only: bool = False
     # Recent failed connections log: list of {time, alias, cmd, code}
     connect_errors: List[Dict[str, Any]] = field(default_factory=list)
+    # Search behavior
+    exact_match_only: bool = False
 
     @classmethod
     def load(cls) -> "UserSettings":
@@ -135,6 +137,7 @@ class UserSettings:
             show_tags_in_list=bool(data.get("show_tags_in_list", True)),
             read_only=bool(data.get("read_only", False)),
             connect_errors=errors_clean,
+            exact_match_only=bool(data.get("exact_match_only", False)),
         )
 
     def save(self) -> None:
