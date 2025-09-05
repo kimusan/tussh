@@ -1,17 +1,25 @@
 
 <p align="center">
-  <img src="assets/tussh-logo.png" alt="TuSSH Logo" width="400"/>
+  <img src="https://raw.githubcontent.com/kimusan/tussh/main/assets/tussh-logo.png" alt="TuSSH Logo" width="400"/>
 </p>
 
 <p align="center">
   <strong>A powerful, feature-rich, and beautiful SSH TUI client.</strong>
   <br />
 
+----
+
 A fast, responsive Textual TUI for browsing and launching SSH hosts from your OpenSSH config.
 
 - Left: searchable host list sorted by usage (most-used first)
 - Right: full, merged effective options for the selected host
 - Enter connects; `a`/`e`/`d` add/edit/delete; `o` options; `Esc` quits
+
+<p align="center">
+  <img src="https://raw.githubcontent.com/kimusan/tussh/main/assets/tussh-screenshot.png" alt="TuSSH screenshot" width="400"/>
+</p>
+
+----
 
 ## Highlights
 
